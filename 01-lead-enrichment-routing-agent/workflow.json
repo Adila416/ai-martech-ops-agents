@@ -1,0 +1,77 @@
+{
+  "workflow_name": "lead_enrichment_and_routing_agent",
+  "version": "1.0",
+  "description": "No-code / low-code AI workflow for enriching, scoring, and routing inbound marketing leads into Salesforce.",
+  "trigger": {
+    "event": "new_lead_created",
+    "source": "marketing_automation_platform",
+    "filters": {
+      "exclude_internal_emails": true,
+      "required_fields": ["email", "company"]
+    }
+  },
+  "steps": [
+    {
+      "step": "enrich_company_data",
+      "type": "data_enrichment",
+      "inputs": ["company_domain"],
+      "outputs": ["company_size", "industry", "region"]
+    },
+    {
+      "step": "collect_engagement_activity",
+      "type": "data_lookup",
+      "inputs": ["lead_id"],
+      "outputs": ["recent_activity"]
+    },
+    {
+      "step": "ai_classification",
+      "type": "llm_call",
+      "model": "llm",
+      "inputs": [
+        "lead_profile",
+        "company_profile",
+        "recent_activity"
+      ],
+      "outputs": [
+        "icp_score",
+        "icp_tier",
+        "segment",
+        "primary_use_case",
+        "sales_summary"
+      ]
+    },
+    {
+      "step": "routing_decision",
+      "type": "decision",
+      "rules": [
+        {
+          "condition": "icp_score < 60",
+          "action": "assign_to_nurture"
+        },
+        {
+          "condition": "icp_score >= 60",
+          "action": "route_to_sales"
+        }
+      ]
+    },
+    {
+      "step": "salesforce_upsert",
+      "type": "crm_action",
+      "system": "salesforce",
+      "action": "create_or_update_lead",
+      "fields_written": [
+        "icp_score",
+        "icp_tier",
+        "segment",
+        "primary_use_case",
+        "ai_sales_summary"
+      ]
+    },
+    {
+      "step": "notify_sales",
+      "type": "notification",
+      "channel": "slack",
+      "message_template": "New inbound lead routed: {{sales_summary}}"
+    }
+  ]
+}
